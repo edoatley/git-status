@@ -1,0 +1,17 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: primes-build-
+spec:
+  pipelineRef:
+    name: primes-build
+  timeout: 1h0m0s
+  workspaces:
+    - name: source-workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi

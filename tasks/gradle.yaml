@@ -1,0 +1,43 @@
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: gradle
+spec:
+  params:
+    - default: clean build
+      description: gradle task names to run
+      name: tasks
+      type: string
+    - default: --stacktrace
+      description: gradle task names to run
+      name: arguments
+      type: string
+    - default: .
+      description: subdirectory to use and run gradle task from
+      name: subdirectory
+      type: string
+    - default: 7.2.0-jdk11
+      description: version of the gradle image to use
+      name: gradle-image
+      type: string
+  steps:
+    - image: gradle:$(params.gradle-image)
+      name: gradle-build
+      resources: { }
+      script: |
+        set -e ; cd "./$(params.subdirectory)"
+        set +x # dont print to shell
+        if [ "$(workspaces.environment-vars.bound)" = "true" ] ; then
+          if [ -f "$(workspaces.environment-vars.path)/token.env" ]; then
+            export $(grep -v '^#' $(workspaces.environment-vars.path)/token.env | xargs)
+          fi
+        fi
+        set -x # print to shell again
+        gradle -q --console=plain -PlocalMode=true $(params.tasks) $(params.arguments)
+        exit "$?"
+      workingDir: $(workspaces.source.path)
+  workspaces:
+    - name: source
+    - name: environment-vars
+      description: Define a file based secret with key=value pairs to expose as envvars
+      optional: true

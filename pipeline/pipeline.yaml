@@ -1,0 +1,84 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: primes-build
+spec:
+  workspaces:
+    - name: source-workspace
+  params:
+    - name: GIT_SOURCE
+      description: The repository to build
+      default: https://github.com/edoatley/primes.git
+    - name: GIT_REVISION
+      description: The git revision tag/commit/branch to use
+      default: master
+    - name: GIT_CHECKOUT_DIRECTORIES
+      description: The directories git should checkout (sparse checkout)
+      default: ''
+    - name: GIT_REPO_NAME
+      description: Full name of the repository
+      default: edoatley/primes
+    - name: GRADLE_BUILD_TASKS
+      description: The gradle tasks required to build and test the project
+      default: 'clean build'
+    - name: GRADLE_BUILD_ARGS
+      description: The gradle args required to build and test the project
+      default: '--stacktrace'
+    - name: GRADLE_BUILD_IMAGE
+      description: The gradle image to use to build and test the project
+      default: "7.3.1-jdk11"
+
+  tasks:
+    - name: clone-repo
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      params:
+        - name: url
+          value: $(params.GIT_SOURCE)
+        - name: revision
+          value: $(params.GIT_REVISION)
+        - name: depth
+          value: "1"
+        - name: sparseCheckoutDirectories
+          value: $(params.GIT_CHECKOUT_DIRECTORIES)
+      workspaces:
+        - name: output
+          workspace: source-workspace
+
+    - name: build-and-test
+      taskRef:
+        name: gradle
+        kind: ClusterTask
+      params:
+        - name: tasks
+          value: $(params.GRADLE_BUILD_TASKS)
+        - name: arguments
+          value: $(params.GRADLE_BUILD_ARGS)
+        - name: subdirectory
+          value: "."
+        - name: gradle-image
+          value: $(params.GRADLE_BUILD_IMAGE)
+      runAfter:
+        - clone-repo
+      workspaces:
+        - name: source
+          workspace: source-workspace
+
+    - name: set-status
+      taskRef:
+         kind: ClusterTask
+         name: github-set-status
+      params:
+        - name: REPO_FULL_NAME
+          value: $(params.GIT_REPO_NAME)
+        - name: SHA
+          value: $(tasks.clone-repo.results.commit)
+        - name: DESCRIPTION
+          value: "Build for commit $(tasks.clone-repo.results.commit) completed "
+        - name: STATE
+          value: "success"
+        - name: TARGET_URL
+          value: "https://link.to.build.com/"
+      runAfter:
+        - build-and-test
